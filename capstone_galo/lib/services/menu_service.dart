@@ -47,6 +47,10 @@ class MenuService {
       ('Turon', 20.0, 'Snacks'),
       ('Iced Tea', 25.0, 'Drinks'),
       ('Bottled Water', 15.0, 'Drinks'),
+      ('Coke', 30.0, 'Drinks'),
+      ('Mango Float', 40.0, 'Desserts'),
+      ('Leche Flan', 35.0, 'Desserts'),
+      ('Halo-Halo', 50.0, 'Desserts'),
     ];
     final batch = _db.batch();
     for (final (name, price, category) in samples) {
