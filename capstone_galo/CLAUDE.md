@@ -12,7 +12,7 @@ Don't add auth, online payment, or multi-canteen support unless asked. See `READ
 
 ## Commands
 
-Flutter is installed at `C:\Users\l12x16w25\Documents\flutter\flutter\bin` and is **not on PATH**. In bash, prefix each command with `export PATH="/c/Users/l12x16w25/Documents/flutter/flutter/bin:$PATH";`.
+Flutter is installed at `C:\Users\l12x16w25\Documents\flutter\flutter\bin`, which is on the user PATH, so `flutter` and `dart` run directly.
 
 ```sh
 flutter pub get
