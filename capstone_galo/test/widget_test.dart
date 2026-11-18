@@ -33,7 +33,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Chicken Adobo with Rice'), findsOneWidget);
-    expect(find.text('Meals'), findsOneWidget);
+    // "Meals" appears as a filter chip and as a section header.
+    expect(find.widgetWithText(ChoiceChip, 'Meals'), findsOneWidget);
+    expect(find.text('Meals'), findsNWidgets(2));
     expect(find.text('Sold out'), findsOneWidget); // Turon is unavailable
     expect(find.textContaining('View cart'), findsNothing);
 
@@ -42,6 +44,31 @@ void main() {
 
     expect(find.textContaining('View cart (1)'), findsOneWidget);
     expect(find.textContaining('₱75.00'), findsWidgets);
+  });
+
+  testWidgets('category chips and search filter the menu', (tester) async {
+    await tester.pumpWidget(CanteenApp(firestore: db, student: student));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Snacks'));
+    await tester.pumpAndSettle();
+    expect(find.text('Turon'), findsOneWidget);
+    expect(find.text('Chicken Adobo with Rice'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
+    await tester.enterText(find.byType(SearchBar), 'adobo');
+    await tester.pumpAndSettle();
+    expect(find.text('Chicken Adobo with Rice'), findsOneWidget);
+    expect(find.text('Turon'), findsNothing);
+
+    await tester.enterText(find.byType(SearchBar), 'pizza');
+    await tester.pumpAndSettle();
+    expect(find.text('No dishes match your search.'), findsOneWidget);
+
+    await tester.tap(find.text('Clear filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Turon'), findsOneWidget);
+    expect(find.text('Chicken Adobo with Rice'), findsOneWidget);
   });
 
   testWidgets('placing an order shows the live status screen', (tester) async {
