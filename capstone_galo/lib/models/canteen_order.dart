@@ -1,13 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Order lifecycle: pending → ready → pickedUp, or pending → cancelled.
+///
+/// [value] is the string stored in Firestore (snake_case, like
+/// `cash_on_pickup`), so always use it instead of `.name` when writing.
 enum OrderStatus {
-  pending,
-  ready;
+  pending('pending', 'Pending'),
+  ready('ready', 'Ready'),
+  pickedUp('picked_up', 'Picked up'),
+  cancelled('cancelled', 'Cancelled');
 
-  static OrderStatus fromName(String? name) =>
-      name == 'ready' ? OrderStatus.ready : OrderStatus.pending;
+  const OrderStatus(this.value, this.label);
 
-  String get label => this == OrderStatus.ready ? 'Ready' : 'Pending';
+  final String value;
+  final String label;
+
+  static OrderStatus fromName(String? name) => OrderStatus.values.firstWhere(
+    (s) => s.value == name,
+    orElse: () => OrderStatus.pending,
+  );
+
+  /// Still waiting to be collected (shown in the staff queue).
+  bool get isActive => this == pending || this == ready;
 }
 
 /// One line of an order. Name and price are copied from the menu at order
@@ -56,6 +70,7 @@ class CanteenOrder {
     this.paymentMethod = cashOnPickup,
     this.createdAt,
     this.readyAt,
+    this.closedAt,
   });
 
   static const cashOnPickup = 'cash_on_pickup';
@@ -73,6 +88,9 @@ class CanteenOrder {
   final DateTime? createdAt;
   final DateTime? readyAt;
 
+  /// When the order was picked up or cancelled.
+  final DateTime? closedAt;
+
   bool get isReady => status == OrderStatus.ready;
 
   factory CanteenOrder.fromMap(String id, Map<String, dynamic> map) =>
@@ -89,6 +107,7 @@ class CanteenOrder {
         paymentMethod: map['paymentMethod'] as String? ?? cashOnPickup,
         createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
         readyAt: (map['readyAt'] as Timestamp?)?.toDate(),
+        closedAt: (map['closedAt'] as Timestamp?)?.toDate(),
       );
 
   /// Fields stored in Firestore, excluding the server-written timestamps.
@@ -98,7 +117,7 @@ class CanteenOrder {
     'studentName': studentName,
     'items': items.map((e) => e.toMap()).toList(),
     'total': total,
-    'status': status.name,
+    'status': status.value,
     'paymentMethod': paymentMethod,
   };
 }

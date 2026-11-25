@@ -21,6 +21,40 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
       .read<OrderService>()
       .watchOrder(widget.orderId);
 
+  bool _cancelling = false;
+
+  Future<void> _cancel() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final service = context.read<OrderService>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: const Text('The canteen will stop preparing it.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep order'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _cancelling = true);
+    try {
+      await service.cancelOrder(widget.orderId);
+      messenger.showSnackBar(const SnackBar(content: Text('Order cancelled.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not cancel: $e')));
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -91,6 +125,17 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
+              if (order.status == OrderStatus.pending) ...[
+                TextButton.icon(
+                  onPressed: _cancelling ? null : _cancel,
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancel order'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               OutlinedButton(
                 onPressed: () =>
                     Navigator.of(context).popUntil((r) => r.isFirst),
@@ -111,24 +156,43 @@ class _StatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ready = order.isReady;
+    final (icon, fg, bg, message) = switch (order.status) {
+      OrderStatus.pending => (
+        Icons.soup_kitchen,
+        Colors.orange.shade800,
+        Colors.amber.shade50,
+        'The canteen is preparing your order. This screen updates automatically when it is ready.',
+      ),
+      OrderStatus.ready => (
+        Icons.notifications_active,
+        Colors.green.shade800,
+        Colors.green.shade100,
+        'Your order is ready for pickup! Show your pickup number and pay ${formatPeso(order.total)} in cash at the counter.',
+      ),
+      OrderStatus.pickedUp => (
+        Icons.done_all,
+        Colors.blueGrey.shade700,
+        Colors.blueGrey.shade50,
+        'You picked up this order. Enjoy your meal!',
+      ),
+      OrderStatus.cancelled => (
+        Icons.cancel,
+        Colors.red.shade800,
+        Colors.red.shade50,
+        'This order was cancelled.',
+      ),
+    };
     return Card(
-      color: ready ? Colors.green.shade100 : Colors.amber.shade50,
+      color: bg,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(
-              ready ? Icons.notifications_active : Icons.soup_kitchen,
-              size: 36,
-              color: ready ? Colors.green.shade800 : Colors.orange.shade800,
-            ),
+            Icon(icon, size: 36, color: fg),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                ready
-                    ? 'Your order is ready for pickup! Show your pickup number and pay ${formatPeso(order.total)} in cash at the counter.'
-                    : 'The canteen is preparing your order. This screen updates automatically when it is ready.',
+                message,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ),

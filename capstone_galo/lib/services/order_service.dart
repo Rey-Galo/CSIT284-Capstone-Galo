@@ -62,13 +62,52 @@ class OrderService {
 
   /// Staff queue: pending orders oldest first; ready orders newest first.
   Stream<List<CanteenOrder>> watchOrdersByStatus(OrderStatus status) => _orders
-      .where('status', isEqualTo: status.name)
+      .where('status', isEqualTo: status.value)
       .snapshots()
       .map((snap) => _sorted(snap, newestFirst: status == OrderStatus.ready));
 
-  Future<void> markReady(String id) => _orders.doc(id).update({
-    'status': OrderStatus.ready.name,
-    'readyAt': FieldValue.serverTimestamp(),
+  Future<void> markReady(String id) => _changeStatus(
+    id,
+    from: OrderStatus.pending,
+    to: OrderStatus.ready,
+    timestampField: 'readyAt',
+  );
+
+  /// Staff: the student collected and paid. Removes it from the staff queue.
+  Future<void> markPickedUp(String id) => _changeStatus(
+    id,
+    from: OrderStatus.ready,
+    to: OrderStatus.pickedUp,
+    timestampField: 'closedAt',
+  );
+
+  /// Student: cancel an order that the canteen hasn't finished yet.
+  Future<void> cancelOrder(String id) => _changeStatus(
+    id,
+    from: OrderStatus.pending,
+    to: OrderStatus.cancelled,
+    timestampField: 'closedAt',
+  );
+
+  /// Moves an order from [from] to [to] inside a transaction, so two phones
+  /// can't race (e.g. a student cancelling while staff mark it ready).
+  /// Throws a [StateError] if the order is no longer in [from].
+  Future<void> _changeStatus(
+    String id, {
+    required OrderStatus from,
+    required OrderStatus to,
+    required String timestampField,
+  }) => _db.runTransaction((tx) async {
+    final ref = _orders.doc(id);
+    final snap = await tx.get(ref);
+    final current = OrderStatus.fromName(snap.data()?['status'] as String?);
+    if (!snap.exists || current != from) {
+      throw StateError('Order is already ${current.label.toLowerCase()}.');
+    }
+    tx.update(ref, {
+      'status': to.value,
+      timestampField: FieldValue.serverTimestamp(),
+    });
   });
 
   // Sorting is done on the client so these queries need no composite index.

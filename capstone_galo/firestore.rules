@@ -1,12 +1,12 @@
 rules_version = '2';
 
-// Firestore rules for the Canteen Pre-Order app. Paste them into
-// Firebase console > Firestore Database > Rules.
+// Firestore rules for the Canteen Pre-Order app. Deploy with
+// `firebase deploy --only firestore:rules`.
 //
 // There are no user accounts (per the project scope), so these rules can't tell
 // students and staff apart. They check the *shape* of each write instead:
-// orders start as 'pending' and can only change to 'ready', and the order
-// counter can only go up. Treat this as demo-level security.
+// orders start as 'pending' and only move forward (see the orders rules), and
+// the order counter can only go up. Treat this as demo-level security.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -28,11 +28,27 @@ service cloud.firestore {
         && request.resource.data.studentId.size() > 0
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0;
-      // Only the Pending -> Ready change is allowed.
-      allow update: if resource.data.status == 'pending'
-        && request.resource.data.status == 'ready'
-        && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['status', 'readyAt']);
+      // Only these status changes are allowed:
+      //   pending -> ready      (staff, sets readyAt)
+      //   ready   -> picked_up  (staff, sets closedAt)
+      //   pending -> cancelled  (student, sets closedAt)
+      // Orders are never deleted so "My Orders" keeps the history.
+      allow update: if (
+          resource.data.status == 'pending'
+          && request.resource.data.status == 'ready'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'readyAt'])
+        ) || (
+          resource.data.status == 'ready'
+          && request.resource.data.status == 'picked_up'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'closedAt'])
+        ) || (
+          resource.data.status == 'pending'
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'closedAt'])
+        );
       allow delete: if false;
     }
 

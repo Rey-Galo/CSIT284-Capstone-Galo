@@ -15,6 +15,18 @@ void main() {
     OrderLine(menuItemId: 't', name: 'Iced Tea', price: 25, qty: 1),
   ];
 
+  // fake_cloud_firestore 4.5.0 doesn't await writes made inside a transaction,
+  // so runTransaction can return before the status changes. Real Firestore
+  // commits first. Tests wait for the status to land before checking anything.
+  Future<CanteenOrder> waitForStatus(
+    OrderService service,
+    String id,
+    OrderStatus status,
+  ) async => (await service
+      .watchOrder(id)
+      .firstWhere((o) => o?.status == status)
+      .timeout(const Duration(seconds: 2)))!;
+
   group('OrderService', () {
     test(
       'placeOrder creates a pending cash order with incrementing numbers',
@@ -67,6 +79,7 @@ void main() {
         );
 
         await service.markReady(id);
+        await waitForStatus(service, id, OrderStatus.ready);
 
         expect(
           await service.watchOrdersByStatus(OrderStatus.pending).first,
@@ -79,6 +92,67 @@ void main() {
         expect(ready.single.readyAt, isNotNull);
       },
     );
+
+    test('markPickedUp closes a ready order and empties both queues', () async {
+      final service = OrderService(db);
+      final id = await service.placeOrder(
+        studentId: 'S1',
+        studentName: 'Ana',
+        lines: lines,
+      );
+      await service.markReady(id);
+      await waitForStatus(service, id, OrderStatus.ready);
+      await service.markPickedUp(id);
+      final order = await waitForStatus(service, id, OrderStatus.pickedUp);
+
+      for (final s in [OrderStatus.pending, OrderStatus.ready]) {
+        expect(await service.watchOrdersByStatus(s).first, isEmpty);
+      }
+      expect(order.closedAt, isNotNull);
+      // Still in the student's history.
+      expect(await service.watchStudentOrders('S1').first, hasLength(1));
+    });
+
+    test('markPickedUp refuses an order that is not ready yet', () async {
+      final service = OrderService(db);
+      final id = await service.placeOrder(
+        studentId: 'S1',
+        studentName: 'Ana',
+        lines: lines,
+      );
+      await expectLater(service.markPickedUp(id), throwsStateError);
+      expect((await service.watchOrder(id).first)!.status, OrderStatus.pending);
+    });
+
+    test('cancelOrder cancels a pending order', () async {
+      final service = OrderService(db);
+      final id = await service.placeOrder(
+        studentId: 'S1',
+        studentName: 'Ana',
+        lines: lines,
+      );
+      await service.cancelOrder(id);
+
+      final order = await waitForStatus(service, id, OrderStatus.cancelled);
+      expect(order.closedAt, isNotNull);
+      expect(
+        await service.watchOrdersByStatus(OrderStatus.pending).first,
+        isEmpty,
+      );
+    });
+
+    test('cancelOrder refuses once the order is ready', () async {
+      final service = OrderService(db);
+      final id = await service.placeOrder(
+        studentId: 'S1',
+        studentName: 'Ana',
+        lines: lines,
+      );
+      await service.markReady(id);
+      await waitForStatus(service, id, OrderStatus.ready);
+      await expectLater(service.cancelOrder(id), throwsStateError);
+      expect((await service.watchOrder(id).first)!.status, OrderStatus.ready);
+    });
 
     test('watchStudentOrders only returns that student\'s orders', () async {
       final service = OrderService(db);
@@ -167,6 +241,21 @@ void main() {
       expect(back.status, OrderStatus.ready);
       expect(back.items.first.qty, 2);
       expect(back.total, 175);
+    });
+
+    test('OrderStatus stores snake_case names and round-trips', () {
+      expect(OrderStatus.values.map((s) => s.value), [
+        'pending',
+        'ready',
+        'picked_up',
+        'cancelled',
+      ]);
+      for (final s in OrderStatus.values) {
+        expect(OrderStatus.fromName(s.value), s);
+      }
+      expect(OrderStatus.fromName('bogus'), OrderStatus.pending);
+      expect(OrderStatus.pickedUp.isActive, isFalse);
+      expect(OrderStatus.ready.isActive, isTrue);
     });
   });
 }

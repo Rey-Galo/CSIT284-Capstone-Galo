@@ -98,15 +98,20 @@ class _StaffOrderCard extends StatefulWidget {
 class _StaffOrderCardState extends State<_StaffOrderCard> {
   bool _saving = false;
 
-  Future<void> _markReady() async {
+  /// Runs a status change; the card then leaves this tab via the live query.
+  Future<void> _advance(
+    Future<void> Function(OrderService, String id) change,
+    String doneText,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final service = context.read<OrderService>();
     setState(() => _saving = true);
     try {
-      await context.read<OrderService>().markReady(widget.order.id);
+      await change(service, widget.order.id);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Order ${formatOrderNo(widget.order.orderNo)} marked ready',
+            'Order ${formatOrderNo(widget.order.orderNo)} $doneText',
           ),
         ),
       );
@@ -165,11 +170,27 @@ class _StaffOrderCardState extends State<_StaffOrderCard> {
                   ),
                 ),
                 const Spacer(),
-                if (!order.isReady)
+                if (order.status == OrderStatus.pending)
                   FilledButton.icon(
-                    onPressed: _saving ? null : _markReady,
+                    onPressed: _saving
+                        ? null
+                        : () => _advance(
+                            (s, id) => s.markReady(id),
+                            'marked ready',
+                          ),
                     icon: const Icon(Icons.check),
                     label: const Text('Mark Ready'),
+                  )
+                else if (order.status == OrderStatus.ready)
+                  FilledButton.tonalIcon(
+                    onPressed: _saving
+                        ? null
+                        : () => _advance(
+                            (s, id) => s.markPickedUp(id),
+                            'picked up',
+                          ),
+                    icon: const Icon(Icons.done_all),
+                    label: const Text('Picked up'),
                   ),
               ],
             ),
