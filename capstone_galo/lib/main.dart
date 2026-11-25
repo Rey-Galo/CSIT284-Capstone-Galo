@@ -14,19 +14,28 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final student = StudentProvider();
   await student.load();
-  final app = CanteenApp(firestore: await _openDatabase(), student: student);
+  final firestore = await _openDatabase();
+  final app = CanteenApp(
+    firestore: firestore,
+    student: student,
+    isDemo: firestore is FakeFirebaseFirestore,
+  );
   // In the browser, show the app inside a phone frame (temporary, for demos).
   runApp(kIsWeb ? PhonePreview(child: app) : app);
 }
 
 /// Uses the real Firestore once `flutterfire configure` has generated
-/// lib/firebase_options.dart. Until then (week 1) it falls back to an
-/// in-memory database with the sample menu, so the app runs without Firebase.
+/// lib/firebase_options.dart. On a platform that wasn't configured it falls
+/// back to an in-memory database with the sample menu, so the app still runs.
 /// Demo data is lost when the app restarts.
 Future<FirebaseFirestore> _openDatabase() async {
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint(
+      'Connected to Firebase project '
+      '${DefaultFirebaseOptions.currentPlatform.projectId}.',
     );
     return FirebaseFirestore.instance;
   } on UnsupportedError {

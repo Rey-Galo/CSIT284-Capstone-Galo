@@ -1,0 +1,25 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "canteen-preorder-6fab0",
+          "appId": "1:954845260220:android:c4241ad988a8097bea23b9",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "canteen-preorder-6fab0",
+          "configurations": {
+            "android": "1:954845260220:android:c4241ad988a8097bea23b9",
+            "web": "1:954845260220:web:893b8345af9acfabea23b9"
+          }
+        }
+      }
+    }
+  }
+}

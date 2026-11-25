@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "954845260220",
+    "project_id": "canteen-preorder-6fab0",
+    "storage_bucket": "canteen-preorder-6fab0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:954845260220:android:c4241ad988a8097bea23b9",
+        "android_client_info": {
+          "package_name": "com.example.capstone_galo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG1VmSU49tcA3qpGBHqbJVEQZ1Rro3b3I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
