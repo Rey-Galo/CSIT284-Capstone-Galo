@@ -196,6 +196,34 @@ void main() {
       await MenuService(db).seedSampleMenu();
       expect(await MenuService(db).watchMenu().first, isNotEmpty);
     });
+
+    test('addSamplePhotos only fills matching items without a photo', () async {
+      final service = MenuService(db);
+      await service.addItem(
+        const FoodItem(id: '', name: 'halo-halo ', price: 50, category: 'X'),
+      );
+      await service.addItem(
+        const FoodItem(
+          id: '',
+          name: 'Turon',
+          price: 20,
+          category: 'X',
+          imageUrl: 'https://example.com/mine.jpg',
+        ),
+      );
+      await service.addItem(
+        const FoodItem(id: '', name: 'Kwek-kwek', price: 20, category: 'X'),
+      );
+
+      expect(await service.addSamplePhotos(), 1);
+
+      final byName = {
+        for (final i in await service.watchMenu().first) i.name: i.imageUrl,
+      };
+      expect(byName['halo-halo '], contains('Halo-Halo.jpg'));
+      expect(byName['Turon'], 'https://example.com/mine.jpg');
+      expect(byName['Kwek-kwek'], isNull);
+    });
   });
 
   group('ConfigService', () {

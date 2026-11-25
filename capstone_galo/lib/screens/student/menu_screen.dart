@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/food_item.dart';
 import '../../services/menu_service.dart';
-import '../../state/cart_provider.dart';
 import '../../state/student_provider.dart';
-import '../../utils/format.dart';
+import '../../theme/tokens.dart';
+import '../../widgets/cart_bar.dart';
 import '../../widgets/menu_item_card.dart';
+import '../../widgets/motion.dart';
+import '../../widgets/state_views.dart';
 import '../staff/staff_pin_screen.dart';
 import 'cart_screen.dart';
+import 'food_details_screen.dart';
 import 'my_orders_screen.dart';
+import 'student_home.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -19,9 +24,7 @@ class MenuScreen extends StatefulWidget {
 }
 
 class _MenuScreenState extends State<MenuScreen> {
-  late final Stream<List<FoodItem>> _menu = context
-      .read<MenuService>()
-      .watchMenu();
+  late Stream<List<FoodItem>> _menu = context.read<MenuService>().watchMenu();
 
   final _searchController = TextEditingController();
   String _query = '';
@@ -29,29 +32,38 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Selected category filter; null means "All".
   String? _category;
 
+  /// Filter button: hide sold-out dishes.
+  bool _availableOnly = false;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-  void _openCart() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const CartScreen()));
+  void _retry() =>
+      setState(() => _menu = context.read<MenuService>().watchMenu());
 
-  void _openStaff() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const StaffPinScreen()));
+  void _push(Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
 
-  void _openOrders() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()));
+  /// Switches to [tab] when inside [StudentHome], otherwise pushes [page].
+  void _openTab(int tab, Widget page) {
+    final home = StudentHome.maybeOf(context);
+    home == null ? _push(page) : home.select(tab);
+  }
+
+  void _openCart() => _openTab(StudentHomeState.cartTab, const CartScreen());
+  void _openStaff() => _push(const StaffPinScreen());
+  void _openOrders() =>
+      _openTab(StudentHomeState.ordersTab, const MyOrdersScreen());
 
   void _clearFilters() {
     _searchController.clear();
     setState(() {
       _query = '';
       _category = null;
+      _availableOnly = false;
     });
   }
 
@@ -60,6 +72,7 @@ class _MenuScreenState extends State<MenuScreen> {
     return [
       for (final item in items)
         if ((category == null || item.category == category) &&
+            (!_availableOnly || item.available) &&
             (q.isEmpty || item.name.toLowerCase().contains(q)))
           item,
     ];
@@ -67,25 +80,112 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: _MenuDrawer(onOpenOrders: _openOrders, onOpenStaff: _openStaff),
-      body: StreamBuilder<List<FoodItem>>(
-        stream: _menu,
-        builder: (context, snap) => CustomScrollView(
-          slivers: [
-            SliverAppBar.medium(
-              // Long-pressing the title is a hidden shortcut to staff mode.
-              title: GestureDetector(
-                onLongPress: _openStaff,
-                child: const Text('Canteen Menu'),
-              ),
-              actions: [_CartButton(onPressed: _openCart)],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Status bar icons that stay readable over the orange header.
+      value:
+          ThemeData.estimateBrightnessForColor(
+                Theme.of(context).colorScheme.primary,
+              ) ==
+              Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          drawer: _MenuDrawer(
+            onOpenOrders: _openOrders,
+            onOpenStaff: _openStaff,
+          ),
+          body: StreamBuilder<List<FoodItem>>(
+            stream: _menu,
+            builder: (context, snap) => CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _Header(
+                    onOpenOrders: _openOrders,
+                    onOpenStaff: _openStaff,
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildSearch(context)),
+                ..._buildBody(context, snap),
+              ],
             ),
-            ..._buildBody(context, snap),
+          ),
+          bottomNavigationBar: CartBar(onPressed: _openCart),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearch(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // White panel with rounded top corners sitting on the orange header.
+    return ColoredBox(
+      color: colors.primary,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLowest,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.lg),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SearchBar(
+                controller: _searchController,
+                hintText: 'Search for "Adobo"',
+                textInputAction: TextInputAction.search,
+                constraints: const BoxConstraints(minHeight: 48),
+                leading: const Icon(Icons.search_rounded),
+                trailing: [
+                  if (_query.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+                ],
+                onChanged: (v) => setState(() => _query = v),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            _availableOnly
+                ? IconButton.filled(
+                    tooltip: 'Show sold-out dishes',
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size.square(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.smAll,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _availableOnly = false),
+                    icon: const Icon(Icons.filter_alt_rounded),
+                  )
+                : IconButton.outlined(
+                    tooltip: 'Hide sold-out dishes',
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size.square(48),
+                      side: BorderSide(color: colors.outlineVariant),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppRadius.smAll,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _availableOnly = true),
+                    icon: const Icon(Icons.filter_alt_outlined),
+                  ),
           ],
         ),
       ),
-      bottomNavigationBar: _CartBar(onPressed: _openCart),
     );
   }
 
@@ -97,29 +197,22 @@ class _MenuScreenState extends State<MenuScreen> {
       return [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: _Message(
-            icon: Icons.cloud_off,
-            text: 'Could not load the menu.\n${snap.error}',
-          ),
+          child: ErrorState(title: "Couldn't load the menu", onRetry: _retry),
         ),
       ];
     }
     if (!snap.hasData) {
-      return const [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ];
+      return const [SliverToBoxAdapter(child: SkeletonList(count: 6))];
     }
     final items = snap.data!;
     if (items.isEmpty) {
       return const [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: _Message(
-            icon: Icons.no_food,
-            text: 'The menu is empty.\nPlease check back later.',
+          child: EmptyState(
+            icon: Icons.no_food_rounded,
+            title: 'The menu is empty',
+            message: 'The canteen hasn\'t added dishes yet. Check back later.',
           ),
         ),
       ];
@@ -129,70 +222,44 @@ class _MenuScreenState extends State<MenuScreen> {
     final categories = <String>{for (final i in items) i.category}.toList();
     // A selected category that left the menu falls back to "All".
     final selected = categories.contains(_category) ? _category : null;
-
-    // Flatten into headers (String) and items (FoodItem) for a lazy list.
     final visible = _filter(items, selected);
-    final rows = <Object>[];
-    for (final (i, item) in visible.indexed) {
-      if (i == 0 || visible[i - 1].category != item.category) {
-        rows.add(item.category);
-      }
-      rows.add(item);
-    }
 
     return [
-      SliverToBoxAdapter(child: _Greeting()),
       SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: SearchBar(
-            controller: _searchController,
-            hintText: 'Search the menu',
-            elevation: const WidgetStatePropertyAll(0),
-            leading: const Icon(Icons.search),
-            trailing: [
-              if (_query.isNotEmpty)
-                IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _query = '');
+        child: Container(
+          color: Theme.of(context).colorScheme.surfaceContainerLowest,
+          height: 96,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            children: [
+              for (final c in [null, ...categories])
+                _CategoryTile(
+                  key: ValueKey('cat-${c ?? 'All'}'),
+                  label: c ?? 'All',
+                  icon: c == null
+                      ? Icons.restaurant_menu_rounded
+                      : categoryIcon(c),
+                  selected: selected == c,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _category = c);
                   },
                 ),
             ],
-            onChanged: (v) => setState(() => _query = v),
           ),
         ),
       ),
-      SliverToBoxAdapter(
-        child: SizedBox(
-          height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              for (final c in [null, ...categories])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    avatar: c == null ? null : Icon(categoryIcon(c), size: 18),
-                    label: Text(c ?? 'All'),
-                    selected: selected == c,
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _category = c),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-      if (rows.isEmpty)
+      if (visible.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
-          child: _Message(
-            icon: Icons.search_off,
-            text: 'No dishes match your search.',
+          child: EmptyState(
+            icon: Icons.search_off_rounded,
+            title: 'No dishes match your search.',
+            message: 'Try another word or category.',
             action: TextButton(
               onPressed: _clearFilters,
               child: const Text('Clear filters'),
@@ -201,19 +268,25 @@ class _MenuScreenState extends State<MenuScreen> {
         )
       else
         SliverPadding(
-          padding: const EdgeInsets.only(bottom: 24),
-          sliver: SliverList.builder(
-            itemCount: rows.length,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          sliver: SliverGrid.builder(
+            // New key per filter so the grid replays its entrance on change.
+            key: ValueKey('$selected|$_query|$_availableOnly'),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: AppSpacing.md,
+              crossAxisSpacing: AppSpacing.md,
+              mainAxisExtent: 208,
+            ),
+            itemCount: visible.length,
             itemBuilder: (context, i) {
-              final row = rows[i];
-              if (row is String) {
-                return _SectionHeader(
-                  category: row,
-                  count: visible.where((it) => it.category == row).length,
-                );
-              }
-              final item = row as FoodItem;
-              return MenuItemCard(key: ValueKey(item.id), item: item);
+              final item = visible[i];
+              return MenuItemCard(
+                key: ValueKey(item.id),
+                item: item,
+                index: i,
+                onTap: () => _push(FoodDetailsScreen(item: item)),
+              );
             },
           ),
         ),
@@ -221,163 +294,190 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 }
 
-/// "Good morning, Juan" style greeting, using the saved student name if any.
-class _Greeting extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final name = context.select<StudentProvider, String?>((s) => s.studentName);
-    final first = name?.trim().split(RegExp(r'\s+')).first;
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 18
-        ? 'Good afternoon'
-        : 'Good evening';
+/// Orange header: who is ordering, where, and a shortcut to My Orders.
+class _Header extends StatelessWidget {
+  const _Header({required this.onOpenOrders, required this.onOpenStaff});
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            first == null || first.isEmpty
-                ? '$greeting!'
-                : '$greeting, $first!',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Order ahead, pay cash at pickup. No more lines.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.category, required this.count});
-
-  final String category;
-  final int count;
+  final VoidCallback onOpenOrders;
+  final VoidCallback onOpenStaff;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
-      child: Row(
-        children: [
-          Icon(categoryIcon(category), size: 22, color: colors.primary),
-          const SizedBox(width: 8),
-          Text(
-            category,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
+    final student = context.watch<StudentProvider>();
+    final name = student.studentName?.trim() ?? '';
+    final initials = name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase())
+        .join();
+    final onHeader = colors.onPrimary;
+
+    return ColoredBox(
+      color: colors.primary,
+      child: SafeArea(
+        bottom: false,
+        child: FadeSlideIn(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.lg,
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            count == 1 ? '1 item' : '$count items',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CartButton extends StatelessWidget {
-  const _CartButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final qty = context.select<CartProvider, int>((c) => c.totalQty);
-    return IconButton(
-      tooltip: 'Cart',
-      onPressed: onPressed,
-      icon: Badge(
-        isLabelVisible: qty > 0,
-        label: Text('$qty'),
-        child: const Icon(Icons.shopping_cart_outlined),
-      ),
-    );
-  }
-}
-
-/// Sticky "View cart" bar that slides in once the cart has something in it.
-class _CartBar extends StatelessWidget {
-  const _CartBar({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<CartProvider>();
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-      child: cart.isEmpty
-          ? const SizedBox(width: double.infinity)
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Material(
-                  color: colors.primary,
-                  borderRadius: BorderRadius.circular(18),
-                  elevation: 3,
-                  child: InkWell(
-                    onTap: onPressed,
-                    borderRadius: BorderRadius.circular(18),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // Avatar opens the drawer (My Orders, Staff Mode).
+                    Semantics(
+                      button: true,
+                      label: 'Open menu',
+                      child: GestureDetector(
+                        onTap: () => Scaffold.of(context).openDrawer(),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: colors.surfaceContainerLowest,
+                          foregroundColor: colors.primary,
+                          child: initials.isEmpty
+                              ? const Icon(Icons.person_rounded)
+                              : Text(
+                                  initials,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: colors.primary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                        ),
                       ),
-                      child: Row(
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.shopping_bag, color: colors.onPrimary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'View cart (${cart.totalQty})',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: colors.onPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                           Text(
-                            formatPeso(cart.total),
+                            name.isEmpty ? 'Hi there!' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              color: colors.onPrimary,
+                              color: onHeader,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.chevron_right, color: colors.onPrimary),
+                          Text(
+                            student.hasStudent
+                                ? 'Student ${student.studentId}'
+                                : 'Student',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: onHeader.withValues(alpha: .9),
+                            ),
+                          ),
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'My Orders',
+                      onPressed: onOpenOrders,
+                      style: IconButton.styleFrom(
+                        backgroundColor: onHeader.withValues(alpha: .2),
+                        foregroundColor: onHeader,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadius.smAll,
+                        ),
+                      ),
+                      icon: const Icon(Icons.notifications_rounded),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                // Long-pressing the canteen name is a hidden shortcut to staff mode.
+                GestureDetector(
+                  onLongPress: onOpenStaff,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.storefront_rounded, size: 18, color: onHeader),
+                      const SizedBox(width: AppSpacing.xs + 2),
+                      Text(
+                        'School Canteen',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: onHeader,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.smAll,
+        child: SizedBox(
+          width: 72,
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: motionDuration(context, AppDurations.fast),
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: selected ? colors.primary : colors.surfaceContainer,
+                  borderRadius: AppRadius.smAll,
+                ),
+                child: Icon(
+                  icon,
+                  color: selected ? colors.onPrimary : colors.primary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  color: selected ? colors.onSurface : colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -391,6 +491,7 @@ class _MenuDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     void close(VoidCallback then) {
       Navigator.pop(context);
       then();
@@ -410,19 +511,32 @@ class _MenuDrawer extends StatelessWidget {
       },
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(28, 24, 16, 16),
+          padding: const EdgeInsets.fromLTRB(
+            28,
+            AppSpacing.xl,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: theme.colorScheme.primaryContainer,
-                foregroundColor: theme.colorScheme.onPrimaryContainer,
-                child: const Icon(Icons.lunch_dining),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm + 2),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.mdAll,
+                  color: colors.primary,
+                ),
+                child: Icon(
+                  Icons.lunch_dining_rounded,
+                  color: colors.onPrimary,
+                ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Canteen Pre-Order',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'Canteen Pre-Order',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -439,7 +553,10 @@ class _MenuDrawer extends StatelessWidget {
           label: Text('My Orders'),
         ),
         const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: 28,
+            vertical: AppSpacing.sm,
+          ),
           child: Divider(),
         ),
         const NavigationDrawerDestination(
@@ -448,39 +565,6 @@ class _MenuDrawer extends StatelessWidget {
           label: Text('Staff Mode'),
         ),
       ],
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text, this.action});
-
-  final IconData icon;
-  final String text;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 56, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (action != null) ...[const SizedBox(height: 8), action!],
-          ],
-        ),
-      ),
     );
   }
 }

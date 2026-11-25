@@ -41,6 +41,12 @@ class CartProvider extends ChangeNotifier {
     if (_items.remove(itemId) != null) notifyListeners();
   }
 
+  /// Puts back a line removed with [remove], e.g. for an Undo action.
+  void restore(CartItem line) {
+    _items[line.item.id] = CartItem(item: line.item, qty: line.qty);
+    notifyListeners();
+  }
+
   void clear() {
     _items.clear();
     notifyListeners();

@@ -24,6 +24,9 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     text: widget.item?.category ?? 'Meals',
   );
   late final _imageUrl = TextEditingController(text: widget.item?.imageUrl);
+  late final _description = TextEditingController(
+    text: widget.item?.description,
+  );
   late bool _available = widget.item?.available ?? true;
   bool _saving = false;
 
@@ -35,6 +38,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     _price.dispose();
     _category.dispose();
     _imageUrl.dispose();
+    _description.dispose();
     super.dispose();
   }
 
@@ -44,21 +48,25 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final url = _imageUrl.text.trim();
+    final description = _description.text.trim();
     final item = FoodItem(
       id: widget.item?.id ?? '',
       name: _name.text.trim(),
       price: double.parse(_price.text.trim()),
       category: _category.text.trim(),
       imageUrl: url.isEmpty ? null : url,
+      description: description.isEmpty ? null : description,
       available: _available,
     );
     setState(() => _saving = true);
     try {
       _isEdit ? await service.updateItem(item) : await service.addItem(item);
       navigator.pop();
-    } catch (e) {
+    } catch (_) {
       if (mounted) setState(() => _saving = false);
-      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't save. Please try again.")),
+      );
     }
   }
 
@@ -111,10 +119,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
           children: [
             TextFormField(
               controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Name'),
               textCapitalization: TextCapitalization.words,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Required' : null,
@@ -125,7 +130,6 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
               decoration: const InputDecoration(
                 labelText: 'Price',
                 prefixText: '₱ ',
-                border: OutlineInputBorder(),
               ),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
@@ -142,7 +146,6 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
               decoration: const InputDecoration(
                 labelText: 'Category',
                 helperText: 'e.g. Meals, Snacks, Drinks',
-                border: OutlineInputBorder(),
               ),
               textCapitalization: TextCapitalization.words,
               validator: (v) =>
@@ -153,9 +156,19 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
               controller: _imageUrl,
               decoration: const InputDecoration(
                 labelText: 'Image URL (optional)',
-                border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+              textCapitalization: TextCapitalization.sentences,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: 200,
             ),
             const SizedBox(height: 8),
             SwitchListTile(

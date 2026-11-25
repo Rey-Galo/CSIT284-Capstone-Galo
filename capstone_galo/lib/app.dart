@@ -2,7 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'screens/student/menu_screen.dart';
+import 'screens/student/student_home.dart';
+import 'theme/app_theme.dart';
 import 'services/config_service.dart';
 import 'services/menu_service.dart';
 import 'services/order_service.dart';
@@ -39,10 +40,10 @@ class CanteenApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Canteen Pre-Order',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
-        ),
-        home: const MenuScreen(),
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: ThemeMode.system,
+        home: const StudentHome(),
         builder: isDemo
             ? (context, child) => Banner(
                 message: 'DEMO DATA',

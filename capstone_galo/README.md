@@ -11,13 +11,14 @@ Capstone project X5. Students browse the canteen menu, add items to a cart, and 
 ## Features
 **Student (default mode)**
 - Live menu grouped by category, with sold-out items greyed out
+- Bottom navbar: Menu, Orders, Cart (with item count)
 - Cart with quantity controls and a running total
 - Checkout with student ID and name (remembered on the phone), cash on pickup
 - Order status screen with a pickup number (e.g. `#0042`) and a live Pending → Ready → Picked up status
 - Cancel an order while it is still Pending
 - My Orders: past orders for the saved student ID
 
-**Staff (drawer → Staff Mode, or long-press the "Canteen Menu" title, then the PIN)**
+**Staff (tap the avatar to open the drawer → Staff Mode, or long-press "School Canteen" in the menu header, then the PIN)**
 - Live order queue with Pending and Ready tabs, a **Mark Ready** button, and **Picked up** to clear collected orders
 - Menu management: add, edit or delete items and toggle sold-out; "Load sample menu" on an empty menu
 

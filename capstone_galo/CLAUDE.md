@@ -28,7 +28,7 @@ Building or running with plugins on Windows needs **Developer Mode** turned on (
 
 ## Architecture
 
-- **One app, two modes.** Student mode is the default (`MenuScreen`). Staff mode (`screens/staff/`) opens from the drawer or by long-pressing the menu title, then `StaffPinScreen`. The PIN is checked on the client against `config/app.staffPin` (default `1234`, see `ConfigService`). This is intentionally not real security.
+- **One app, two modes.** Student mode is the default (`MenuScreen`). Staff mode (`screens/staff/`) opens from the drawer (tap the avatar in the menu header) or by long-pressing "School Canteen" in that header, then `StaffPinScreen`. The PIN is checked on the client against `config/app.staffPin` (default `1234`, see `ConfigService`). This is intentionally not real security.
 - **Dependency wiring.** `lib/app.dart` (`CanteenApp`) takes the `FirebaseFirestore` instance as a parameter and provides `MenuService`, `OrderService`, `ConfigService` (plain `Provider`) plus `CartProvider` and `StudentProvider` (`ChangeNotifier`). Tests pass a `FakeFirebaseFirestore` from `fake_cloud_firestore`. Keep services constructor-injected so this keeps working.
 - **Firestore access lives only in `lib/services/`.** Screens read services with `context.read` and create their streams once in state fields (`late final _x = context.read<...>().watch...()`), never inside `build`.
 - **No composite indexes.** Queries use a single `where` at most, and sorting happens on the client (`OrderService._sorted`, `MenuService.watchMenu`). Keep it that way, or the Firebase console will require index setup.

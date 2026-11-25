@@ -9,6 +9,7 @@ class FoodItem {
     required this.price,
     required this.category,
     this.imageUrl,
+    this.description,
     this.available = true,
   });
 
@@ -18,17 +19,25 @@ class FoodItem {
   final String category;
   final String? imageUrl;
 
+  /// Optional short text shown on the details page.
+  final String? description;
+
   /// False means "sold out": shown greyed out and cannot be added to the cart.
   final bool available;
 
   factory FoodItem.fromMap(String id, Map<String, dynamic> map) {
-    final rawUrl = (map['imageUrl'] as String?)?.trim();
+    String? optional(String key) {
+      final v = (map[key] as String?)?.trim();
+      return (v == null || v.isEmpty) ? null : v;
+    }
+
     return FoodItem(
       id: id,
       name: map['name'] as String? ?? '',
       price: (map['price'] as num? ?? 0).toDouble(),
       category: map['category'] as String? ?? 'Others',
-      imageUrl: (rawUrl == null || rawUrl.isEmpty) ? null : rawUrl,
+      imageUrl: optional('imageUrl'),
+      description: optional('description'),
       available: map['available'] as bool? ?? true,
     );
   }
@@ -38,6 +47,7 @@ class FoodItem {
     'price': price,
     'category': category,
     'imageUrl': imageUrl,
+    'description': description,
     'available': available,
   };
 }
