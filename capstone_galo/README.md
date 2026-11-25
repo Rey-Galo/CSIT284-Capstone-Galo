@@ -4,7 +4,7 @@
 **Project Code:** Capstone Project X5\
 **Workstation:** #25
 
-Capstone project X5. Students browse the canteen menu, add items to a cart, and place a pre-order. Canteen staff see the orders live and mark them **Ready**, and the student's screen updates by itself.
+Capstone project X5. Students browse the canteen menu, add items to a cart, and place a pre-order. Canteen staff see the orders live and mark them **Ready**, and the student's screen updates by itself. When the student collects the food, staff mark it **Picked up**.
 
 **Scope:** cash-on-pickup only, a single canteen, and no user accounts (students type their student ID). Android app built with Flutter and Cloud Firestore.
 
@@ -13,34 +13,39 @@ Capstone project X5. Students browse the canteen menu, add items to a cart, and 
 - Live menu grouped by category, with sold-out items greyed out
 - Cart with quantity controls and a running total
 - Checkout with student ID and name (remembered on the phone), cash on pickup
-- Order status screen with a pickup number (e.g. `#0042`) and a live Pending → Ready status
+- Order status screen with a pickup number (e.g. `#0042`) and a live Pending → Ready → Picked up status
+- Cancel an order while it is still Pending
 - My Orders: past orders for the saved student ID
 
 **Staff (drawer → Staff Mode, or long-press the "Canteen Menu" title, then the PIN)**
-- Live order queue with Pending and Ready tabs, and a **Mark Ready** button
+- Live order queue with Pending and Ready tabs, a **Mark Ready** button, and **Picked up** to clear collected orders
 - Menu management: add, edit or delete items and toggle sold-out; "Load sample menu" on an empty menu
 
-## Demo mode (no Firebase yet)
-If `flutterfire configure` has not been run, the app starts with an in-memory database filled with the sample menu. Everything works on one phone, but data resets when the app restarts. Configuring Firebase (below) switches to the real database automatically.
+## Demo mode (fallback)
+The app is connected to the Firebase project `canteen-preorder-6fab0` for Android and Web. On a platform that wasn't configured, it starts with an in-memory database filled with the sample menu and shows a **DEMO DATA** corner banner. Everything works on one device, but that data resets when the app restarts.
 
 ## Setup
 1. Install Flutter and enable Windows **Developer Mode** (`start ms-settings:developers`), which plugin builds need.
-2. Create a project in the [Firebase console](https://console.firebase.google.com) and turn on **Cloud Firestore**.
-3. Connect the app (this overwrites the placeholder `lib/firebase_options.dart`):
+2. The app is already connected (`lib/firebase_options.dart`, `android/app/google-services.json`). These hold public client settings, not secrets, so they are committed. To connect a different Firebase project instead:
    ```sh
-   npm install -g firebase-tools && firebase login
+   npm install -g firebase-tools
+   firebase login
    dart pub global activate flutterfire_cli
-   flutterfire configure --platforms=android
+   flutterfire configure --platforms=android,web
    ```
-4. Paste `firestore.rules` into Firestore → Rules and publish.
-5. Optional: set the staff PIN by creating the document `config/app` with field `staffPin` (string). Until then the PIN is **1234**.
-6. Run `flutter pub get`, then `flutter run`. In Staff Mode → Menu, tap **Load sample menu**.
+   `firebase` and `flutterfire` install into `%APPDATA%\npm` and `%LOCALAPPDATA%\Pub\Cache\bin`, so both folders need to be on your PATH.
+3. Deploy the security rules. This also creates the Firestore database if it doesn't exist yet:
+   ```sh
+   firebase deploy --only firestore:rules
+   ```
+4. Optional: set the staff PIN by creating the document `config/app` with field `staffPin` (string). Until then the PIN is **1234**.
+5. Run `flutter pub get`, then `flutter run`. In Staff Mode → Menu, tap **Load sample menu**.
 
 ## Firestore data
 | Collection | Fields |
 |---|---|
 | `menu_items` | name, price, category, imageUrl?, available, createdAt |
-| `orders` | orderNo, studentId, studentName, items[{menuItemId, name, price, qty}], total, status (`pending`/`ready`), paymentMethod, createdAt, readyAt |
+| `orders` | orderNo, studentId, studentName, items[{menuItemId, name, price, qty}], total, status (`pending`/`ready`/`picked_up`/`cancelled`), paymentMethod, createdAt, readyAt, closedAt |
 | `config/app` | staffPin, nextOrderNo |
 
 ## Security note
